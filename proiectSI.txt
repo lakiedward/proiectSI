@@ -1,0 +1,225 @@
+//--------------------------SERVO MOTOR--------------------------
+#include <Servo.h>
+
+Servo servo1;
+
+
+
+//----------------------------BUTTON-----------------------------
+const int buttonPin = 2;     // the number of the pushbutton pin
+int buttonState = 0;
+
+//--------------------------FORCE SENZOR-------------------------
+//#define FORCE_SENSOR_PIN A0 
+// the FSR and 10K pulldown are connected to A0
+
+
+//--------------------------ULTRASONIC U1------------------------
+int trigPinU1 = 11;    // Trigger U1
+int echoPinU1 = 12;    // Echo U1
+long duration1 ,inches1;
+
+//--------------------------ULTRASONIC U2------------------------
+int trigPinU2 = 7;    // Trigger U2M
+int echoPinU2 = 6;    // Echo U2
+long duration2 ,inches2;
+int U1_state = 0;
+
+int car_count = 2;
+bool car_count_changed=false;
+int open_position = 0;
+int U2_state = 0;
+
+int in = 0;
+
+//----------------------------LCD-----------------------------------
+#include <LiquidCrystal.h> 
+LiquidCrystal lcd(1, 3, 4, 5, 9, 10); 
+int Contrast=75;
+
+void setup()
+{
+  Serial.begin(9600);
+  
+  //--------------------------ULTRASONIC U1----------------------
+  //Define inputs and outputs
+  pinMode(trigPinU1, OUTPUT);
+  pinMode(echoPinU1, INPUT);
+  
+  
+  //--------------------------ULTRASONIC U2----------------------
+  //Define inputs and outputs
+  pinMode(trigPinU2, OUTPUT);
+  pinMode(echoPinU2, INPUT);
+  
+  
+  //--------------------------BUTTON----------------------------
+  // initialize the pushbutton pin as an input:
+  pinMode(buttonPin, INPUT);
+  
+  //--------------------------SERVO MOTOR------------------------
+  servo1.attach(13);
+  servo1.write(0);
+  
+  //--------------------------LCD--------------------------------
+  analogWrite(8,Contrast);
+  lcd.begin(16, 10);
+  lcd.clear();
+  //--------------------------LED------------------------------
+  pinMode(14, OUTPUT);
+}
+
+
+void loop()
+{
+  //--------------------------BUTTON--------------------------
+  // read the state of the pushbutton value:
+  buttonState = digitalRead(buttonPin);
+  
+  
+  //--------------------------FORCE SENSOR--------------------------
+  //int analogReading = analogRead(FORCE_SENSOR_PIN);
+
+    
+    //--------------------------ULTRASONIC U1----------------------
+  
+  // The sensor is triggered by a HIGH pulse of 10 or more microseconds.
+  // Give a short LOW pulse beforehand to ensure a clean HIGH pulse:
+  digitalWrite(trigPinU1, LOW);
+  delayMicroseconds(5);
+  digitalWrite(trigPinU1, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPinU1, LOW);
+ 
+  // Read the signal from the sensor: a HIGH pulse whose
+  // duration is the time (in microseconds) from the sending
+  // of the ping to the reception of its echo off of an object.
+  pinMode(echoPinU1, INPUT);
+  duration1 = pulseIn(echoPinU1, HIGH);
+ 
+  // Convert the time into a distance
+  inches1 = (duration1/2) / 74;   
+  
+  
+   //--------------------------ULTRASONIC U2----------------------
+  
+  // The sensor is triggered by a HIGH pulse of 10 or more microseconds.
+  // Give a short LOW pulse beforehand to ensure a clean HIGH pulse:
+  digitalWrite(trigPinU2, LOW);
+  delayMicroseconds(5);
+  digitalWrite(trigPinU2, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPinU2, LOW);
+ 
+  // Read the signal from the sensor: a HIGH pulse whose
+  // duration is the time (in microseconds) from the sending
+  // of the ping to the reception of its echo off of an object.
+  pinMode(echoPinU2, INPUT);
+  duration2 = pulseIn(echoPinU2, HIGH);
+ 
+  // Convert the time into a distance
+  inches2 = (duration2/2) / 74;
+  
+  
+  // Check if U1 is true and the button is pressed
+  if (inches1 < 125 && buttonState == HIGH)
+    {
+       // Move the servo to the "open" position
+		servo1.write(90);
+    	open_position = 1;  
+    	U2_state = 0;
+    	in = 1;
+   
+  	}
+  	// Check if U1 is false and U2 is true, the car is partially parked
+  	else if (inches1 >= 125 && inches2 < 125 && in == 1) 
+		{
+      		// Do nothing, don't update the car count
+      		U2_state = 1;
+      
+ 		}
+  	// Check if U1 and U2 are false, the car is parked
+  	else if (inches1 >= 125 && inches2 >= 125 && open_position == 1 && U2_state == 1) 
+		{
+ 			// Move the servo to the "closed" position
+			servo1.write(0);
+ 			car_count--;
+     		car_count_changed = true;
+    		open_position = 0;
+      		U2_state = 0;
+      
+ 		}
+  // Check if U1 is true, button is pressed, and then becomes false before U2
+ 	else if (inches1 >= 125 && inches2 >= 125 && U2_state == 0 && in == 1) 
+ 		{
+              // Move the servo to the "closed" position
+				servo1.write(0);
+      			in = 0;
+    	}
+   // If U2 detects a car close enough and U1 does not, open the gate (car exiting scenario)
+    else if(inches2 < 125 && inches1 >= 125 && in == 0)
+       {
+    	  servo1.write(90);
+    	  open_position = 1;
+   		   U1_state = 0;
+      }
+  // If U1 detects a car but U2 does not, prepare for a possible exit
+    else if(inches2 >= 125 && inches1 < 125 && in == 0)
+      {
+         U1_state = 1;
+      }
+  // If both sensors detect no car and a car was exiting
+    else if (inches2 >= 125 && inches2 >= 125 && open_position == 1 && U1_state == 1 && in == 0)
+      {
+           servo1.write(0);
+ 			car_count++;
+     		car_count_changed = true;
+    		open_position = 0;
+      		U1_state = 0;
+      		
+      }
+  // If both sensors are clear and the gate was previously opened for an entering car
+     else if(inches1 >= 125 && inches2 >= 125 && U1_state == 0 && in == 1)
+      {
+      		U1_state = 0;
+      		in = 0;
+      }
+  
+  	if (car_count_changed) { // You need to set this flag whenever the car count changes
+        // Clear the LCD screen
+        lcd.clear();
+
+        // Display the updated car count
+        lcd.setCursor(0, 1); // Set the cursor to the first column and first row
+        lcd.print(car_count);
+
+        // Reset the flag
+        car_count_changed = false;
+    }
+
+ 	// Print the car count to the serial monitor
+	Serial.print("Car count: ");
+	Serial.println(car_count);
+  
+  	if (car_count == 0) {
+    	digitalWrite(14, HIGH); // Turn on LED
+    	delay(200);
+  	} else {
+    	digitalWrite(14, LOW); // Turn off LED
+      	delay(200);
+  	}
+    
+}
+
+
+
+
+
+
+
+  
+  
+     
+
+
+
